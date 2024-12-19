@@ -156,7 +156,8 @@ mod tests {
     use axum_extra::extract::PrivateCookieJar;
     use axum_test::TestServer;
     use http::header::{HeaderValue, COOKIE};
-    use loco_rs::config::{Config, Database, Logger, Middlewares, Server, Workers};
+    use loco_rs::config::{Config, Database, Logger, Server, Workers};
+    use loco_rs::controller::middleware::{self};
     use loco_rs::environment::Environment;
     use loco_rs::storage::Storage;
     use loco_rs::{cache, storage};
@@ -173,7 +174,7 @@ mod tests {
         AppContext {
             environment: Environment::Production,
             db: DatabaseConnection::default(),
-            queue: None,
+            queue_provider: None,
             config: Config {
                 initializers: None,
                 logger: Logger::default(),
@@ -182,7 +183,7 @@ mod tests {
                     port: 8080,
                     host: "test-host".to_string(),
                     ident: None,
-                    middlewares: Middlewares {
+                    middlewares: middleware::Config {
                         compression: None,
                         etag: None,
                         limit_payload: None,
@@ -191,6 +192,10 @@ mod tests {
                         timeout_request: None,
                         cors: None,
                         static_assets: None,
+                        secure_headers: None,
+                        remote_ip: None,
+                        fallback: None,
+                        request_id: None,
                     },
                 },
                 database: Database {
@@ -210,6 +215,7 @@ mod tests {
                 mailer: None,
                 settings: None,
                 queue: None,
+                scheduler: None,
             },
             mailer: None,
             storage: Storage::single(storage::drivers::null::new()).into(),
