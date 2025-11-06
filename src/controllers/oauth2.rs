@@ -39,6 +39,8 @@ pub async fn get_authorization_url<T: DatabasePool + Clone + Debug + Sync + Send
     auth_url.to_string()
 }
 
+/// Exchanges the `OAuth2` authorization code for a token.
+///
 /// Helper function to exchange the code for a token and then get the user profile
 /// then upsert the user and the session and set the token in a short live
 /// cookie Lastly, it will redirect the user to the protected URL
@@ -112,6 +114,8 @@ pub async fn callback<
     Ok(response)
 }
 
+/// Callback function for the `OAuth2` flow
+///
 /// Helper function to exchange the code for a token and then get the user profile
 /// then upsert the user and the session and set the token in a short live
 /// cookie Lastly, it will redirect the user to the protected URL
@@ -199,6 +203,7 @@ pub async fn google_authorization_url<T: DatabasePool + Clone + Debug + Sync + S
 }
 
 /// The callback URL for the `OAuth2` flow
+///
 /// This will exchange the code for a token and then get the user profile
 /// then upsert the user and the session and set the token in a short live
 /// cookie Lastly, it will redirect the user to the protected URL
@@ -244,6 +249,7 @@ pub async fn google_callback_cookie<
 }
 
 /// The callback URL for the `OAuth2` flow
+///
 /// This will exchange the code for a token and then get the user profile
 /// then upsert the user and the session and set the token in a short live
 /// cookie Lastly, it will redirect the user to the protected URL
