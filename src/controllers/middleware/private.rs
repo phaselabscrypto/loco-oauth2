@@ -1,6 +1,5 @@
 use crate::grants::authorization_code::CookieConfig;
 use crate::{base_oauth2::url, OAuth2ClientStore, COOKIE_NAME};
-use async_trait::async_trait;
 use axum::response::{IntoResponse, IntoResponseParts, ResponseParts};
 use axum::{
     extract::{FromRef, FromRequestParts},
@@ -72,7 +71,6 @@ impl OAuth2PrivateCookieJar {
         self.0.decrypt(cookie)
     }
 }
-#[async_trait]
 pub trait OAuth2PrivateCookieJarTrait: Clone {
     /// Create a short live cookie with the token response
     ///
@@ -88,7 +86,7 @@ pub trait OAuth2PrivateCookieJarTrait: Clone {
         config: &CookieConfig,
         token: &BasicTokenResponse,
         jar: Self,
-    ) -> loco_rs::prelude::Result<Self>;
+    ) -> Result<Self, Box<loco_rs::errors::Error>>;
 }
 
 impl OAuth2PrivateCookieJarTrait for OAuth2PrivateCookieJar {
@@ -96,7 +94,7 @@ impl OAuth2PrivateCookieJarTrait for OAuth2PrivateCookieJar {
         config: &CookieConfig,
         token: &BasicTokenResponse,
         jar: Self,
-    ) -> loco_rs::prelude::Result<Self> {
+    ) -> Result<Self, Box<loco_rs::errors::Error>> {
         // Set the cookie
         let secs: i64 = token
             .expires_in()
@@ -108,15 +106,19 @@ impl OAuth2PrivateCookieJarTrait for OAuth2PrivateCookieJar {
         let protected_url = config
             .protected_url
             .clone()
-            .unwrap_or_else(|| "http://localhost:3000/oauth2/protected".to_string());
+            .unwrap_or_else(|| "http://localhost:5150/oauth2/protected".to_string());
         let protected_url = url::Url::parse(&protected_url)
             .map_err(|_e| loco_rs::errors::Error::InternalServerError)?;
-        let protected_domain = protected_url.domain().unwrap_or("localhost");
+        let protected_domain = protected_url.host().ok_or_else(|| {
+            loco_rs::errors::Error::Message(format!(
+                "Error parsing host from protected url: {protected_url}"
+            ))
+        })?;
         let protected_path = protected_url.path();
         // Create the cookie with the session id, domain, path, and secure flag from
         // the token and profile
         let cookie = cookie::Cookie::build((COOKIE_NAME, token.access_token().secret().to_owned()))
-            .domain(protected_domain.to_owned())
+            .domain(protected_domain.to_string())
             .path(protected_path.to_owned())
             // secure flag is for https - https://datatracker.ietf.org/doc/html/rfc6749#section-3.1.2.1
             .secure(true)
@@ -127,7 +129,6 @@ impl OAuth2PrivateCookieJarTrait for OAuth2PrivateCookieJar {
     }
 }
 
-#[async_trait]
 impl<S> FromRequestParts<S> for OAuth2PrivateCookieJar
 where
     S: Send + Sync,
@@ -156,7 +157,10 @@ mod tests {
     use axum_extra::extract::PrivateCookieJar;
     use axum_test::TestServer;
     use http::header::{HeaderValue, COOKIE};
-    use loco_rs::config::{Config, Database, Logger, Server, Workers};
+    use loco_rs::app::SharedStore;
+    use loco_rs::config::{
+        CacheConfig, Config, Database, InMemCacheConfig, Logger, Server, Workers,
+    };
     use loco_rs::controller::middleware::{self};
     use loco_rs::environment::Environment;
     use loco_rs::storage::Storage;
@@ -164,6 +168,7 @@ mod tests {
     use sea_orm::DatabaseConnection;
     use serde_json::json;
     use std::collections::BTreeMap;
+    use std::sync::Arc;
 
     // Helper function to create a Key for encryption/decryption
     fn create_key() -> Key {
@@ -209,6 +214,7 @@ mod tests {
                     auto_migrate: false,
                     dangerously_truncate: false,
                     dangerously_recreate: false,
+                    run_on_start: None,
                 },
                 auth: None,
                 workers: Workers::default(),
@@ -216,10 +222,12 @@ mod tests {
                 settings: None,
                 queue: None,
                 scheduler: None,
+                cache: CacheConfig::InMem(InMemCacheConfig { max_capacity: 64 }),
             },
             mailer: None,
             storage: Storage::single(storage::drivers::null::new()).into(),
             cache: cache::Cache::new(cache::drivers::null::new()).into(),
+            shared_store: Arc::new(SharedStore::default()),
         }
     }
     fn cookies_from_request(headers: &HeaderMap) -> impl Iterator<Item = Cookie<'static>> + '_ {
